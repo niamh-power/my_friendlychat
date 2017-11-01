@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';                        //new
 import 'package:flutter/cupertino.dart';                      //new
+import 'package:google_sign_in/google_sign_in.dart';                   // new
+import 'dart:async';                                               // new
 
 const String _name = "Niamh";
 
@@ -14,6 +16,8 @@ final ThemeData kDefaultTheme = new ThemeData(
   primarySwatch: Colors.purple,
   accentColor: Colors.orangeAccent[400],
 );
+
+final googleSignIn = new GoogleSignIn();
 
 void main() {
   runApp(new FriendlychatApp());
@@ -80,24 +84,14 @@ class ChatScreenState extends State<ChatScreen>  with TickerProviderStateMixin {
     );
   }
 
-  void _handleSubmitted(String text) {
+  Future<Null> _handleSubmitted(String text) async {
     _textController.clear();
 
     setState(() {
       _isComposing = false;
     });
-
-    ChatMessage message = new ChatMessage(
-      text: text,
-      animationController: new AnimationController(
-        duration: new Duration(milliseconds: 700),
-        vsync: this,
-      ),
-    );
-    setState(() {
-      _messages.insert(0, message);
-    });
-    message.animationController.forward();
+    await _ensureLoggedIn();
+    _sendMessage(text: text);
   }
 
   @override
@@ -134,6 +128,29 @@ class ChatScreenState extends State<ChatScreen>  with TickerProviderStateMixin {
     );
   }
 
+  Future<Null> _ensureLoggedIn() async {
+    GoogleSignInAccount user = googleSignIn.currentUser;
+    if (user == null)
+      user = await googleSignIn.signInSilently();
+    if (user == null) {
+      await googleSignIn.signIn();
+    }
+  }
+
+  void _sendMessage({ String text }) {
+    ChatMessage message = new ChatMessage(
+      text: text,
+      animationController: new AnimationController(
+        duration: new Duration(milliseconds: 700),
+        vsync: this,
+      ),
+    );
+    setState(() {
+      _messages.insert(0, message);
+    });
+    message.animationController.forward();
+  }
+
   @override
   void dispose() {
     for (ChatMessage message in _messages)
@@ -162,12 +179,15 @@ class ChatMessage extends StatelessWidget {
             children: <Widget>[
               new Container(
                 margin: const EdgeInsets.only(right: 16.0),
-                child: new CircleAvatar(child: new Text(_name[0])),
+                child: new CircleAvatar(child: new CircleAvatar(
+                  backgroundImage: new NetworkImage(googleSignIn.currentUser.photoUrl),
+                )),
               ),
               new Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    new Text(_name, style: Theme.of(context).textTheme.subhead),
+                    new Text(googleSignIn.currentUser.displayName,
+                        style: Theme.of(context).textTheme.subhead),
                     new Container(
                       margin: const EdgeInsets.only(top: 5.0),
                       child: new Text(text),
