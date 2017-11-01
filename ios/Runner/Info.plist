@@ -57,5 +57,9 @@
 			</array>
 		</dict>
 	</array>
+	         <key>NSCameraUsageDescription</key>                  <!-- new -->
+             <string>Share images with other chat users</string>  <!-- new -->
+             <key>NSPhotoLibraryUsageDescription</key>            <!-- new -->
+             <string>Share images with other chat users</string>  <!-- new -->
 </dict>
 </plist>

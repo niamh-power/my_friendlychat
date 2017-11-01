@@ -3,6 +3,16 @@ import 'package:flutter/foundation.dart';                        //new
 import 'package:flutter/cupertino.dart';                      //new
 import 'package:google_sign_in/google_sign_in.dart';                   // new
 import 'dart:async';                                               // new
+import 'package:firebase_analytics/firebase_analytics.dart';      // new
+import 'package:firebase_auth/firebase_auth.dart';                // new
+import 'package:firebase_database/firebase_database.dart';         //new
+import 'package:firebase_database/ui/firebase_animated_list.dart'; //new
+import 'package:firebase_storage/firebase_storage.dart';          // new
+import 'package:image_picker/image_picker.dart';     // new
+
+import 'dart:math';                                  // new
+import 'dart:io';                                    // new
+
 
 const String _name = "Niamh";
 
@@ -18,6 +28,10 @@ final ThemeData kDefaultTheme = new ThemeData(
 );
 
 final googleSignIn = new GoogleSignIn();
+
+final analytics = new FirebaseAnalytics();
+final auth = FirebaseAuth.instance;
+final reference = FirebaseDatabase.instance.reference().child('messages');
 
 void main() {
   runApp(new FriendlychatApp());
@@ -41,8 +55,8 @@ class ChatScreen extends StatefulWidget {
   State createState() => new ChatScreenState();
 }
 
-class ChatScreenState extends State<ChatScreen>  with TickerProviderStateMixin {
-  final List<ChatMessage> _messages = <ChatMessage>[];
+
+class ChatScreenState extends State<ChatScreen> {             // modified
   final TextEditingController _textController = new TextEditingController();
   bool _isComposing = false;
 
@@ -51,9 +65,24 @@ class ChatScreenState extends State<ChatScreen>  with TickerProviderStateMixin {
       data: new IconThemeData(color: Theme.of(context).accentColor),
       child: new Container(
           margin: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: new Row(
-              children: <Widget>[
-                new Flexible(
+          child: new Row( children: <Widget>[
+            new Container(                                           //new
+              margin: new EdgeInsets.symmetric(horizontal: 4.0),     //new
+              child: new IconButton(                                 //new
+                  icon: new Icon(Icons.photo_camera),                //new
+                  onPressed: () async {
+                    await _ensureLoggedIn();
+                    File imageFile = await ImagePicker.pickImage();
+                    int random = new Random().nextInt(100000);                         //new
+                    StorageReference ref =                                             //new
+                    FirebaseStorage.instance.ref().child("image_$random.jpg");         //new
+                    StorageUploadTask uploadTask = ref.put(imageFile);                 //new
+                    Uri downloadUrl = (await uploadTask.future).downloadUrl;           //new
+                    _sendMessage(imageUrl: downloadUrl.toString());                // new
+                  }
+              ),                                                     //new
+            ),                                                       //new
+            new Flexible(
                   child:  new TextField(
                     controller: _textController,
                     onChanged: (String text) {
@@ -66,7 +95,7 @@ class ChatScreenState extends State<ChatScreen>  with TickerProviderStateMixin {
                         hintText: "Send a message"),
                   ),
                 ),
-                new Container(
+            new Container(
                   margin: new EdgeInsets.symmetric(horizontal: 4.0),
                   child: Theme.of(context).platform == TargetPlatform.iOS ?
                     new CupertinoButton(
@@ -77,7 +106,7 @@ class ChatScreenState extends State<ChatScreen>  with TickerProviderStateMixin {
                         icon: new Icon(Icons.send),
                         onPressed: _isComposing ? () => _handleSubmitted(_textController.text) : null,
                     )
-                ),
+            ),
               ]
           )
       )
@@ -105,12 +134,18 @@ class ChatScreenState extends State<ChatScreen>  with TickerProviderStateMixin {
           child: new Column(                                      //modified
             children: <Widget>[
               new Flexible(
-                child: new ListView.builder(
-                  padding: new EdgeInsets.all(8.0),
-                  reverse: true,
-                  itemBuilder: (_, int index) => _messages[index],
-                  itemCount: _messages.length,
-                ),
+                child: new FirebaseAnimatedList(                            //new
+                  query: reference,                                       //new
+                  sort: (a, b) => b.key.compareTo(a.key),                 //new
+                  padding: new EdgeInsets.all(8.0),                       //new
+                  reverse: true,                                          //new
+                  itemBuilder: (_, DataSnapshot snapshot, Animation<double> animation) { //new
+                    return new ChatMessage(                               //new
+                        snapshot: snapshot,                                 //new
+                        animation: animation                                //new
+                    );                                                    //new
+                  },                                                      //new
+                ),                                                        //new
               ),
               new Divider(height: 1.0),
               new Container(
@@ -134,43 +169,35 @@ class ChatScreenState extends State<ChatScreen>  with TickerProviderStateMixin {
       user = await googleSignIn.signInSilently();
     if (user == null) {
       await googleSignIn.signIn();
+      analytics.logLogin();
+    }
+    if (await auth.currentUser() == null) {
+      GoogleSignInAuthentication credentials = await googleSignIn.currentUser.authentication;
+      await auth.signInWithGoogle(idToken: credentials.idToken, accessToken: credentials.accessToken);
     }
   }
 
-  void _sendMessage({ String text }) {
-    ChatMessage message = new ChatMessage(
-      text: text,
-      animationController: new AnimationController(
-        duration: new Duration(milliseconds: 700),
-        vsync: this,
-      ),
-    );
-    setState(() {
-      _messages.insert(0, message);
-    });
-    message.animationController.forward();
-  }
-
-  @override
-  void dispose() {
-    for (ChatMessage message in _messages)
-      message.animationController.dispose();
-    super.dispose();
+  void _sendMessage({ String text, String imageUrl }) {
+    reference.push().set({                                         //new
+      'text': text,
+      'imageUrl': imageUrl,                                         //new//new
+      'senderName': googleSignIn.currentUser.displayName,          //new
+      'senderPhotoUrl': googleSignIn.currentUser.photoUrl,         //new
+    });                                                            //new
+    analytics.logEvent(name: 'send_message');
   }
 }
 
 class ChatMessage extends StatelessWidget {
-  ChatMessage({this.text, this.animationController});
-  final String text;
-  final AnimationController animationController;
+  ChatMessage({this.snapshot, this.animation});              // modified
+  final DataSnapshot snapshot;                               // modified
+  final Animation animation;                                 // modified
 
   @override
   Widget build(BuildContext context) {
     return new SizeTransition(
-      sizeFactor: new CurvedAnimation(
-        parent: animationController,
-        curve: Curves.bounceIn
-      ),
+        sizeFactor: new CurvedAnimation(
+            parent: animation, curve: Curves.easeOut),            // modified
       axisAlignment: 0.0,
       child: new Container(
           margin: const EdgeInsets.symmetric(vertical: 10.0),
@@ -179,23 +206,29 @@ class ChatMessage extends StatelessWidget {
             children: <Widget>[
               new Container(
                 margin: const EdgeInsets.only(right: 16.0),
-                child: new CircleAvatar(child: new CircleAvatar(
-                  backgroundImage: new NetworkImage(googleSignIn.currentUser.photoUrl),
-                )),
+                child: new CircleAvatar(
+                    backgroundImage:
+                    new NetworkImage(snapshot.value['senderPhotoUrl'])),  //modified
               ),
               new Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    new Text(googleSignIn.currentUser.displayName,
-                        style: Theme.of(context).textTheme.subhead),
-                    new Container(
-                      margin: const EdgeInsets.only(top: 5.0),
-                      child: new Text(text),
-                    )
-                  ]
-              )
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  new Text(snapshot.value['senderName'],                      //modified
+                      style: Theme.of(context).textTheme.subhead),
+                  new Container(
+                    margin: const EdgeInsets.only(top: 5.0),
+                    child: snapshot.value['imageUrl'] != null ?                //modified
+                    new Image.network(                                         //new
+                      snapshot.value['imageUrl'],                             //new
+                      width: 250.0,                                           //new
+                    ) :                                                        //new
+                    new Text(snapshot.value['text']),
+                  ),
+                ],
+              ),
             ],
-          )
+          ),
+
       )
     );
   }
