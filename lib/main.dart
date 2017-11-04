@@ -180,7 +180,7 @@ class ChatScreenState extends State<ChatScreen> {             // modified
   void _sendMessage({ String text, String imageUrl }) {
     reference.push().set({                                         //new
       'text': text,
-      'imageUrl': imageUrl,                                         //new//new
+      'photoUrl': imageUrl,                                         //new//new
       'senderName': googleSignIn.currentUser.displayName,          //new
       'senderPhotoUrl': googleSignIn.currentUser.photoUrl,         //new
     });                                                            //new
@@ -204,12 +204,6 @@ class ChatMessage extends StatelessWidget {
           child: new Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              new Container(
-                margin: const EdgeInsets.only(right: 16.0),
-                child: new CircleAvatar(
-                    backgroundImage:
-                    new NetworkImage(snapshot.value['senderPhotoUrl'])),  //modified
-              ),
               new Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -217,12 +211,10 @@ class ChatMessage extends StatelessWidget {
                       style: Theme.of(context).textTheme.subhead),
                   new Container(
                     margin: const EdgeInsets.only(top: 5.0),
-                    child: snapshot.value['imageUrl'] != null ?                //modified
-                    new Image.network(                                         //new
-                      snapshot.value['imageUrl'],                             //new
-                      width: 250.0,                                           //new
-                    ) :                                                        //new
-                    new Text(snapshot.value['text']),
+                    child: snapshot.value['photoUrl'] != null ? new Image.network(
+                      snapshot.value['photoUrl'],
+                      width: 250.0,
+                    ) : new Text(snapshot.value['text']),
                   ),
                 ],
               ),
